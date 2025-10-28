@@ -3,54 +3,42 @@ name: Build, Push Docker to GAR, and Deploy
 on:
   push:
     branches:
-      - "main"  # Trigger on push to the "main" branch
+      - "main"
 
 jobs:
-  # ---------------------------------------------------------
-  # Job 1: Checkout the code
-  # ---------------------------------------------------------
   checkout:
-    runs-on: self-hosted-gcp  # This uses your self-hosted runner
-
+    runs-on: self-hosted-gcp
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-  # ---------------------------------------------------------
-  # Job 2: Build and Push Docker Image to Google Artifact Registry (GAR)
-  # ---------------------------------------------------------
   build_and_push:
-    needs: checkout  # This job will run after the checkout job
-    runs-on: self-hosted-gcp  # This uses your self-hosted runner
+    needs: checkout
+    runs-on: self-hosted-gcp
 
     steps:
-      # Step 1: Checkout code again to make sure it's available in this job
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Authenticate to GCP using service account key
+      - name: Create .env file from secret
+        run: |
+          echo "${{ secrets.MY_ENV_VARS }}" > .env
+
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      # Step 3: Configure Docker to use Artifact Registry
       - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      # Step 4: Build Docker image from Dockerfile
-      - name: Build Docker image
+      - name: Build Docker Image
         run: |
           docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
 
-      # Step 5: Push Docker image to GAR
-      - name: Push Docker image to GAR
-        run: |
-          docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+      - name: Push Docker Image to GAR
+        run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
-  # ---------------------------------------------------------
-  # Job 3: Pull and Deploy using Docker Compose
-  # ---------------------------------------------------------
   deploy:
     needs: build_and_push
     runs-on: self-hosted-gcp
@@ -59,22 +47,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 1: Authenticate to GCP
+      - name: Create .env file from secret
+        run: |
+          echo "${{ secrets.MY_ENV_VARS }}" > .env
+
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      # Step 2: Configure Docker for GAR
       - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      # Step 3: Pull latest image from GAR
-      - name: Pull latest Docker image
+      - name: Pull latest image
         run: docker pull us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
-      # Step 4: Install Docker Compose (if not installed)
-      - name: Install Docker Compose
+      - name: Install Docker Compose if missing
         run: |
           if ! command -v docker-compose &> /dev/null
           then
@@ -82,10 +70,8 @@ jobs:
             sudo apt-get install -y docker-compose
           fi
 
-      # Step 5: Deploy containers using Docker Compose
-      - name: Deploy containers using Docker Compose
+      - name: Deploy using Docker Compose
         run: |
-          echo "Starting deployment..."
           docker-compose down || true
           docker-compose up -d
-          echo "✅ Deployment completed successfully!"
+          echo "✅ Deployment Successful!"
