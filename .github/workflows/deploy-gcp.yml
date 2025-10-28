@@ -8,7 +8,6 @@ on:
 jobs:
   checkout:
     runs-on: self-hosted-gcp
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -19,7 +18,17 @@ jobs:
 
     steps:
       - name: Checkout code
+      ...
+
+
+      - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Create .env from GitHub Secret
+        run: |
+          cat << 'EOF' > .env
+${{ secrets.MY_ENV_VARS }}
+EOF
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
@@ -27,23 +36,31 @@ jobs:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Configure Docker for GAR
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      - name: Build Docker image
-        run: |
-          docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
+      - name: Build Docker Image
+        run: docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
 
-      - name: Push Docker image to GAR
-        run: |
-          docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+      - name: Push Docker Image
+        run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
   deploy:
     needs: build_and_push
     runs-on: self-hosted-gcp
 
+    defaults:
+      run:
+        working-directory: /home/ganesh_cheekurthi/actions-runner/_work/new-project-repo/new-project-repo
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Create .env from GitHub Secret
+        run: |
+          cat << 'EOF' > .env
+${{ secrets.MY_ENV_VARS }}
+EOF
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
@@ -51,26 +68,20 @@ jobs:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Configure Docker for GAR
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      - name: Pull latest Docker image
+      - name: Pull latest image
         run: docker pull us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
-      # ✅ Create .env from GitHub Secret
-      - name: Create .env file
+      - name: Ensure Docker Compose Installed
         run: |
-          echo "${{ secrets.MY_ENV_VARS }}" > .env
-          sed -i 's/\r$//' .env
-
-      - name: Install Docker Compose
-        run: |
-          if ! command -v docker-compose &> /dev/null
-          then
+          if ! command -v docker-compose &> /dev/null; then
             sudo apt-get update
             sudo apt-get install -y docker-compose
           fi
 
-      - name: Deploy containers using Docker Compose
+      - name: Deploy
         run: |
           docker-compose down || true
           docker-compose up -d
+          echo "✅ Deployment Successful!"
