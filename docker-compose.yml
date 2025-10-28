@@ -11,7 +11,7 @@ services:
     depends_on:
       - traeta-postgres
     env_file:
-      - .env   # ✅ LOAD ENV HERE
+      - .env
 
   master-service:
     image: us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
@@ -23,7 +23,7 @@ services:
     depends_on:
       - traeta-postgres
     env_file:
-      - .env   # ✅ LOAD ENV HERE
+      - .env
 
   traeta-postgres:
     image: postgres:15
