@@ -7,7 +7,7 @@ on:
 
 jobs:
   # ---------------------------------------------------------
-  # JOB 1: CHECKOUT + RESTORE .env
+  # JOB 1: CHECKOUT
   # ---------------------------------------------------------
   checkout:
     runs-on: ubuntu-latest
@@ -16,19 +16,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore .env from base64 secret (Secure)
+      # Restore .env from BASE64 Secret
+      - name: Create .env locally (for reference only)
         run: |
           echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
-
-      - name: Mask .env values (Prevent showing in logs)
-        shell: bash
-        run: |
-          while IFS='=' read -r key value; do
-            [[ -n "$value" ]] && echo "::add-mask::$value"
-          done < .env
+          sed -n '1,5p' .env
+          echo "✅ .env restored locally (not used for deploy)"
 
   # ---------------------------------------------------------
-  # JOB 2: Build & Push Docker image to GAR
+  # JOB 2: Build & Push Image to GAR
   # ---------------------------------------------------------
   build-and-push:
     needs: checkout
@@ -42,7 +38,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      - name: Configure Docker for GAR
+      - name: Configure Docker to push to GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
       - name: Build Docker image
@@ -52,7 +48,7 @@ jobs:
         run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
   # ---------------------------------------------------------
-  # JOB 3: SSH to GCP VM & DEPLOY
+  # JOB 3: SSH to VM and Deploy using docker-compose
   # ---------------------------------------------------------
   deploy:
     needs: build-and-push
@@ -67,9 +63,17 @@ jobs:
       - name: Deploy to VM
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
-          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > /home/${{ secrets.GCP_VM_USER }}/traeta/.env
-          cd /home/${{ secrets.GCP_VM_USER }}/traeta
-          docker-compose down || true
+          cd /home/${{ secrets.GCP_VM_USER }}/new-project-repo
+
+          echo "🔄 Updating .env..."
+          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
+
+          echo "🚀 Pulling latest image..."
           docker pull us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+
+          echo "🔄 Restarting services..."
+          docker-compose down || true
           docker-compose up -d --force-recreate
+
+          echo "✅ Deployment completed successfully."
           EOF
