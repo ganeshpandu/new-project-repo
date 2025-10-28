@@ -77,4 +77,4 @@ EOF
         run: |
           docker-compose down || true
           docker-compose up -d --build
-          echo "✅ Deployment Successful!"
+          echo "✅ Deployment Successful"
