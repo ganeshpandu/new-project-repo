@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Create .env file from secret (Correct Multi-line)
+      - name: "Create .env file from secret"
         run: |
           cat << 'EOF' > .env
 ${{ secrets.MY_ENV_VARS }}
@@ -49,7 +49,7 @@ EOF
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Create .env file from secret (Correct Multi-line)
+      - name: "Create .env file from secret"
         run: |
           cat << 'EOF' > .env
 ${{ secrets.MY_ENV_VARS }}
