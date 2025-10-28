@@ -9,10 +9,8 @@ jobs:
   checkout:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Restore .env (local only, not used on server)
-        run: echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
+      - name: Checkout code
+        uses: actions/checkout@v4
 
   build-and-push:
     needs: checkout
@@ -25,40 +23,57 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      - name: Docker Auth
+      - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      - name: Build Image
-        run: docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
+      - name: Build Docker Image
+        run: |
+          docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
 
-      - name: Push Image
+      - name: Push Image to GAR (just store it, not used in deploy)
         run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+
+      - name: Save Built Image as Tar
+        run: docker save us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest > backend-image.tar
+
+      - name: Upload image tar as artifact for next job
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image
+          path: backend-image.tar
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Download built image tar
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-image
+
       - name: Prepare SSH Key
         run: |
           echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > private_key
           chmod 600 private_key
 
-      - name: Deploy
+      - name: Copy Image to VM
+        run: |
+          scp -o StrictHostKeyChecking=no -i private_key backend-image.tar ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }}:/home/${{ secrets.GCP_VM_USER }}/backend-image.tar
+
+      - name: Deploy on VM (load image & restart containers)
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
           cd /home/${{ secrets.GCP_VM_USER }}/new-project-repo
-          
+
+          echo "🔄 Updating .env..."
           echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
 
-          CURRENT_IMAGE=$(docker inspect --format='{{.Config.Image}}' traeta-backend 2>/dev/null || echo "none")
+          echo "📦 Loading new Docker image..."
+          docker load < /home/${{ secrets.GCP_VM_USER }}/backend-image.tar
 
-          if [ "$CURRENT_IMAGE" != "none" ]; then
-            TIMESTAMP=$(date +%Y%m%d%H%M%S)
-            docker tag $CURRENT_IMAGE $CURRENT_IMAGE-backup-$TIMESTAMP
-          fi
-
-          docker pull us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
-
+          echo "🚀 Restarting services..."
           docker-compose down || true
           docker-compose up -d --force-recreate
+
+          echo "✅ Deployment completed successfully."
           EOF
