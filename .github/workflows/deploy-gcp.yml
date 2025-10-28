@@ -20,9 +20,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Create .env file from secret
+      - name: Create .env file from secret (Correct Multi-line)
         run: |
-          echo "${{ secrets.MY_ENV_VARS }}" > .env
+          cat << 'EOF' > .env
+${{ secrets.MY_ENV_VARS }}
+EOF
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
@@ -30,7 +32,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Configure Docker for GAR
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Build Docker Image
         run: |
@@ -47,9 +49,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Create .env file from secret
+      - name: Create .env file from secret (Correct Multi-line)
         run: |
-          echo "${{ secrets.MY_ENV_VARS }}" > .env
+          cat << 'EOF' > .env
+${{ secrets.MY_ENV_VARS }}
+EOF
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
@@ -57,15 +61,14 @@ jobs:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Configure Docker for GAR
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Pull latest image
         run: docker pull us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
-      - name: Install Docker Compose if missing
+      - name: Ensure Docker Compose Installed
         run: |
-          if ! command -v docker-compose &> /dev/null
-          then
+          if ! command -v docker-compose &> /dev/null; then
             sudo apt-get update
             sudo apt-get install -y docker-compose
           fi
@@ -73,5 +76,5 @@ jobs:
       - name: Deploy using Docker Compose
         run: |
           docker-compose down || true
-          docker-compose up -d
+          docker-compose up -d --build
           echo "✅ Deployment Successful!"
