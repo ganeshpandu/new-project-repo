@@ -1,80 +1,70 @@
-name: Build & Push Backend to GAR
+name: Deploy to GCP VM
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - "main"
 
 jobs:
-
-  # -------------------------------
-  # 1) CHECKOUT CODE
-  # -------------------------------
+  # ---------------------------------------------------------
+  # JOB 1: CHECKOUT
+  # ---------------------------------------------------------
   checkout:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Save workspace
-        uses: actions/upload-artifact@v3
-        with:
-          name: source-code
-          path: .
-
-  # -------------------------------
-  # 2) DECODE .env + BUILD + PUSH
-  # -------------------------------
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: checkout
-    steps:
-      - name: Download workspace
-        uses: actions/download-artifact@v3
-        with:
-          name: source-code
-
-      - name: Decode .env file from Base64
+      # Restore .env from BASE64 Secret
+      - name: Create .env from secret
         run: |
-          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 -d > .env
-          ls -al
-          cat .env  # <-- remove this line later (just verifying .env is correct)
+          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
+          cat .env
+
+  # ---------------------------------------------------------
+  # JOB 2: Build & Push Docker image
+  # ---------------------------------------------------------
+  build-and-push:
+    needs: checkout
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      - name: Configure Docker for Artifact Registry
+      - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      - name: Build Docker Image
-        run: |
-          docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
+      - name: Build Docker image
+        run: docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
 
-      - name: Push Docker Image
-        run: |
-          docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+      - name: Push Docker image
+        run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
-  # -------------------------------
-  # 3) DEPLOY TO GCP VM (SSH & RESTART)
-  # -------------------------------
+  # ---------------------------------------------------------
+  # JOB 3: SSH to VM and Deploy using docker-compose
+  # ---------------------------------------------------------
   deploy:
-    runs-on: ubuntu-latest
     needs: build-and-push
-    steps:
-      - name: Setup SSH
-        run: |
-          eval $(ssh-agent -s)
-          echo "${{ secrets.GCP_VM_SSH_PRIVATE_KEY }}" | tr -d '\r' | ssh-add -
-          mkdir -p ~/.ssh
-          echo "${{ secrets.GCP_VM_SSH_HOST_KEY }}" >> ~/.ssh/known_hosts
+    runs-on: ubuntu-latest
 
-      - name: SSH into VM & Deploy
+    steps:
+      - name: Download SSH Key
         run: |
-          ssh ansible@YOUR_VM_IP << 'EOF'
-          cd /opt/traeta-backend
-          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 -d > .env
-          docker-compose pull
-          docker-compose down
-          docker-compose up -d
+          echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > private_key
+          chmod 600 private_key
+
+      - name: Create .env on VM and Deploy
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
+          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > /home/${{ secrets.GCP_VM_USER }}/traeta/.env
+          cd /home/${{ secrets.GCP_VM_USER }}/traeta
+          docker-compose down || true
+          docker pull us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+          docker-compose up -d --force-recreate
           EOF
