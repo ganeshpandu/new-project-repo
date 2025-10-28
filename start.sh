@@ -7,7 +7,11 @@ npx prisma migrate deploy --schema=libs/prisma/schema.prisma
 cd /app
 npx prisma migrate deploy --schema=libs/prisma/schema.prisma
 
-# Start both services in background
+# Use Docker Compose to bring up the containers
+echo "Bringing up the containers using Docker Compose..."
+docker-compose up -d
+
+# Start both services in the background (user-service and master-service)
 cd /app/user-service
 npm run start:dev &
 
