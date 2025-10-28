@@ -7,7 +7,7 @@ on:
 
 jobs:
   # ---------------------------------------------------------
-  # JOB 1: CHECKOUT
+  # JOB 1: CHECKOUT + RESTORE .env
   # ---------------------------------------------------------
   checkout:
     runs-on: ubuntu-latest
@@ -16,14 +16,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Restore .env from BASE64 Secret
-      - name: Create .env from secret
+      - name: Restore .env from base64 secret (Secure)
         run: |
           echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
-          cat .env
+
+      - name: Mask .env values (Prevent showing in logs)
+        shell: bash
+        run: |
+          while IFS='=' read -r key value; do
+            [[ -n "$value" ]] && echo "::add-mask::$value"
+          done < .env
 
   # ---------------------------------------------------------
-  # JOB 2: Build & Push Docker image
+  # JOB 2: Build & Push Docker image to GAR
   # ---------------------------------------------------------
   build-and-push:
     needs: checkout
@@ -47,19 +52,19 @@ jobs:
         run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
   # ---------------------------------------------------------
-  # JOB 3: SSH to VM and Deploy using docker-compose
+  # JOB 3: SSH to GCP VM & DEPLOY
   # ---------------------------------------------------------
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download SSH Key
+      - name: Prepare SSH Key
         run: |
           echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > private_key
           chmod 600 private_key
 
-      - name: Create .env on VM and Deploy
+      - name: Deploy to VM
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
           echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > /home/${{ secrets.GCP_VM_USER }}/traeta/.env
