@@ -3,9 +3,10 @@ name: Build, Push Docker to GAR, and Deploy
 on:
   push:
     branches:
-      - "main"
+      - "main"  # Trigger on push to the "main" branch
 
 jobs:
+
   checkout:
     runs-on: self-hosted-gcp
     steps:
@@ -20,7 +21,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: "Create .env file from secret"
+      # ✅ Create .env safely from multi-line GitHub secret
+      - name: Generate .env from GitHub Secret
         run: |
           cat << 'EOF' > .env
 ${{ secrets.MY_ENV_VARS }}
@@ -34,12 +36,13 @@ EOF
       - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      - name: Build Docker Image
+      - name: Build Docker image
         run: |
           docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
 
-      - name: Push Docker Image to GAR
-        run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+      - name: Push Docker image to GAR
+        run: |
+          docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
   deploy:
     needs: build_and_push
@@ -49,7 +52,8 @@ EOF
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: "Create .env file from secret"
+      # ✅ Generate .env again for deployment
+      - name: Generate .env from GitHub Secret
         run: |
           cat << 'EOF' > .env
 ${{ secrets.MY_ENV_VARS }}
@@ -63,18 +67,19 @@ EOF
       - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      - name: Pull latest image
+      - name: Pull latest backend image
         run: docker pull us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
-      - name: Ensure Docker Compose Installed
+      - name: Ensure Docker Compose installed
         run: |
           if ! command -v docker-compose &> /dev/null; then
             sudo apt-get update
             sudo apt-get install -y docker-compose
           fi
 
-      - name: Deploy using Docker Compose
+      - name: Deploy containers
         run: |
+          echo "⚙️ Deploying to server..."
           docker-compose down || true
           docker-compose up -d --build
-          echo "✅ Deployment Successful"
+          echo "✅ Deployment completed successfully!"
