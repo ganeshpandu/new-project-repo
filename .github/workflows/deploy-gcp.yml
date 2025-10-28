@@ -1,0 +1,34 @@
+name: Push Docker to GAR
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  docker:
+    runs-on: self-hosted-gcp
+
+    steps:
+      # Step 1: Checkout your code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Authenticate to GCP using service account secret
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      # Step 3: Configure Docker to use Artifact Registry
+      - name: Configure Docker for GAR
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+
+      # Step 4: Build Docker image from Dockerfile
+      - name: Build Docker image
+        run: |
+          docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
+
+      # Step 5: Push Docker image to GAR
+      - name: Push Docker image
+        run: |
+          docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
