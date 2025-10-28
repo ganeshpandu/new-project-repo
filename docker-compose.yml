@@ -18,26 +18,6 @@ services:
       - "3002:3002"
     networks:
       - traeta-network
-version: '3.8'
-
-services:
-  user-service:
-    image: traeta-backend
-    container_name: user-service
-    ports:
-      - "3001:3001"
-    networks:
-      - traeta-network
-    depends_on:
-      - traeta-postgres
-
-  master-service:
-    image: traeta-backend
-    container_name: master-service
-    ports:
-      - "3002:3002"
-    networks:
-      - traeta-network
     depends_on:
       - traeta-postgres
 
@@ -51,25 +31,9 @@ services:
     volumes:
       - /opt/docker/postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=Techv1@3
-      - POSTGRES_DB=traeta-db
-    depends_on:
-      - traeta-postgres
-
-  traeta-postgres:
-    image: postgres:15
-    container_name: traeta-postgres
-    ports:
-      - "5432:5432"
-    networks:
-      - traeta-network
-    volumes:
-      - /opt/docker/postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=Techv1@3
-      - POSTGRES_DB=traeta-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Techv1@3
+      POSTGRES_DB: traeta-db
 
   traeta-nginx:
     build:
