@@ -1,34 +1,40 @@
-name: Push Docker to GAR
+name: Build, Push Docker to GAR, and Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ]  # Trigger on push to the "main" branch
 
 jobs:
-  docker:
-    runs-on: self-hosted-gcp
+  deploy:
+    runs-on: self-hosted-gcp  # This uses your self-hosted runner
 
     steps:
-      # Step 1: Checkout your code
+      # Step 1: Checkout your code from the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Authenticate to GCP using service account secret
+      # Step 2: Authenticate to GCP using the service account secret
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
         with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}  # GCP Service Account Key stored in Secrets
 
       # Step 3: Configure Docker to use Artifact Registry
       - name: Configure Docker for GAR
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev  # Configuring Docker to authenticate with GAR
 
       # Step 4: Build Docker image from Dockerfile
       - name: Build Docker image
         run: |
-          docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
+          docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .  # Build the image
 
       # Step 5: Push Docker image to GAR
-      - name: Push Docker image
+      - name: Push Docker image to GAR
         run: |
-          docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+          docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest  # Push the image to GAR
+
+      # Step 6: Deploy the containers using Docker Compose
+      - name: Deploy containers using Docker Compose
+        run: |
+          chmod +x ./start.sh  # Make sure the start.sh script is executable
+          ./start.sh  # Run the start.sh script to deploy using Docker Compose
