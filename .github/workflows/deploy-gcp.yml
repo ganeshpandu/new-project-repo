@@ -1,4 +1,4 @@
-name: Deploy to GCP VM (Self-Hosted)
+name: Deploy to GCP VM (Self-Hosted) with Versioned Tag
 
 on:
   push:
@@ -6,17 +6,12 @@ on:
       - "main"
 
 jobs:
-  checkout:
+  build-and-push:
     runs-on: self-hosted-gcp
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-  build-and-push:
-    needs: checkout
-    runs-on: self-hosted-gcp
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
@@ -26,15 +21,38 @@ jobs:
       - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      - name: Build Docker Image
+      - name: Read and increment version
+        id: version
         run: |
-          docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
+          if [ ! -f version.txt ]; then
+            echo "0" > version.txt
+          fi
+          current_version=$(cat version.txt)
+          new_version=$((current_version + 1))
+          echo "$new_version" > version.txt
+          echo "new_version=$new_version" >> $GITHUB_ENV
+          echo "Version updated to v$new_version"
+
+      - name: Build Docker Image
+        id: build
+        run: |
+          docker build -t traeta-backend-temp .
+          image_id=$(docker images traeta-backend-temp --format "{{.ID}}" | head -n1)
+          short_sha=$(echo $image_id | cut -c1-6)
+          echo "short_sha=$short_sha" >> $GITHUB_ENV
+          echo "Built image ID: $short_sha"
+
+      - name: Tag Image with Version
+        run: |
+          docker tag traeta-backend-temp us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:${{ env.short_sha }}-v${{ env.new_version }}
+          echo "final_tag=us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:${{ env.short_sha }}-v${{ env.new_version }}" >> $GITHUB_ENV
+          echo "Tagged image as ${{ env.final_tag }}"
 
       - name: Push Image to GAR
-        run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+        run: docker push ${{ env.final_tag }}
 
       - name: Save Built Image as Tar
-        run: docker save us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest > backend-image.tar
+        run: docker save ${{ env.final_tag }} > backend-image.tar
 
       - name: Upload Image Artifact
         uses: actions/upload-artifact@v4
@@ -42,9 +60,18 @@ jobs:
           name: backend-image
           path: backend-image.tar
 
+      - name: Commit updated version.txt
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "github-actions"
+          git add version.txt
+          git commit -m "Bump version to v${{ env.new_version }}" || echo "No version change to commit"
+          git push origin main || echo "Push skipped"
+
   deploy:
     needs: build-and-push
     runs-on: self-hosted-gcp
+
     steps:
       - uses: actions/checkout@v4
 
@@ -62,3 +89,4 @@ jobs:
           docker compose down || true
           docker compose up -d --force-recreate
           echo "✅ Deployment completed successfully."
+          echo "🚀 Deployed Image: ${{ env.final_tag }}"
