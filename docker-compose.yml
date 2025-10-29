@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   user-service:
-    image: us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+    image: us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:{{IMAGE_TAG}}
     container_name: user-service
     restart: always
     ports:
@@ -15,7 +15,7 @@ services:
       - traeta-network
 
   master-service:
-    image: us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+    image: us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:{{IMAGE_TAG}}
     container_name: master-service
     restart: always
     ports:
