@@ -1,4 +1,4 @@
-name: Deploy to GCP VM
+name: Deploy to GCP VM (Self-Hosted)
 
 on:
   push:
@@ -7,14 +7,14 @@ on:
 
 jobs:
   checkout:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted-gcp
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
   build-and-push:
     needs: checkout
-    runs-on: ubuntu-latest
+    runs-on: self-hosted-gcp
     steps:
       - uses: actions/checkout@v4
 
@@ -30,13 +30,13 @@ jobs:
         run: |
           docker build -t us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest .
 
-      - name: Push Image to GAR (just store it, not used in deploy)
+      - name: Push Image to GAR
         run: docker push us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
 
       - name: Save Built Image as Tar
         run: docker save us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest > backend-image.tar
 
-      - name: Upload image tar as artifact for next job
+      - name: Upload Image Artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-image
@@ -44,36 +44,21 @@ jobs:
 
   deploy:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: self-hosted-gcp
     steps:
-      - name: Download built image tar
+      - uses: actions/checkout@v4
+
+      - name: Download Built Image
         uses: actions/download-artifact@v4
         with:
           name: backend-image
 
-      - name: Prepare SSH Key
+      - name: Update Environment File
+        run: echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
+
+      - name: Load Image & Restart Containers
         run: |
-          echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > private_key
-          chmod 600 private_key
-
-      - name: Copy Image to VM
-        run: |
-          scp -o StrictHostKeyChecking=no -i private_key backend-image.tar ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }}:/home/${{ secrets.GCP_VM_USER }}/backend-image.tar
-
-      - name: Deploy on VM (load image & restart containers)
-        run: |
-          ssh -o StrictHostKeyChecking=no -i private_key ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
-          cd /home/${{ secrets.GCP_VM_USER }}/new-project-repo
-
-          echo "🔄 Updating .env..."
-          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
-
-          echo "📦 Loading new Docker image..."
-          docker load < /home/${{ secrets.GCP_VM_USER }}/backend-image.tar
-
-          echo "🚀 Restarting services..."
-          docker-compose down || true
-          docker-compose up -d --force-recreate
-
+          docker load < backend-image.tar
+          docker compose down || true
+          docker compose up -d --force-recreate
           echo "✅ Deployment completed successfully."
-          EOF
