@@ -1,4 +1,4 @@
-name: Deploy to GCP VM (Self-Hosted) with Versioned Tag (No version.txt)
+name: Deploy to GCP VM (Self-Hosted) with Versioned Tag
 
 on:
   push:
@@ -30,10 +30,23 @@ jobs:
       - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
+      # 🔹 Version generator (independent from run_number)
       - name: Generate Version Tag
         id: version
         run: |
-          VERSION="v${{ github.run_number }}"
+          VERSION_FILE="/tmp/build_version.txt"
+
+          # Initialize if missing
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "1" > "$VERSION_FILE"
+          fi
+
+          # Read, increment, and update version
+          CURRENT=$(cat "$VERSION_FILE")
+          NEW=$((CURRENT + 1))
+          echo "$NEW" > "$VERSION_FILE"
+
+          VERSION="v${NEW}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Using version tag: $VERSION"
 
