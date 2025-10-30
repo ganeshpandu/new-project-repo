@@ -41,8 +41,8 @@ services:
 
   traeta-nginx:
     build:
-      context: ./nginx
-      dockerfile: Dockerfile.nginx
+      context: .                     # 👈 changed from ./nginx to . so it can access apple-app-site-association
+      dockerfile: ./nginx/Dockerfile.nginx
     container_name: traeta-nginx
     ports:
       - "80:80"

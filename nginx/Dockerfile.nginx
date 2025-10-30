@@ -1,7 +1,11 @@
-# nginx/Dockerfile.nginx
 FROM nginx:alpine
-
+ 
 # Copy custom Nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+ 
+# Copy Apple App Site Association file into the served directory
+RUN mkdir -p /usr/share/nginx/html/.well-known
+COPY apple-app-site-association /usr/share/nginx/html/.well-known/apple-app-site-association
+COPY assetlinks /usr/share/nginx/html/.well-known/assetlinks
 
 EXPOSE 80
