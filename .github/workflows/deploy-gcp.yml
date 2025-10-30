@@ -97,7 +97,8 @@ jobs:
         run: |
           echo "Updating docker-compose.yml with tag: $FINAL_TAG"
           sed -i "s|{{IMAGE_TAG}}|${FINAL_TAG}|g" docker-compose.yml
-          cat docker-compose.yml
+          echo "✅ docker-compose.yml updated:"
+          grep "${FINAL_TAG}" docker-compose.yml || echo "⚠️ Tag not found"
 
       - name: Update Environment File
         run: echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
