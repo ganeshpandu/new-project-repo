@@ -1,4 +1,4 @@
-name: Deploy to GCP VM (Self-hosted) with Versioned Tag
+name: Deploy to GCP VM (Self-Hosted) with Versioned Tag
 
 on:
   push:
@@ -34,12 +34,13 @@ jobs:
         id: version
         run: |
           if [ ! -f version.txt ]; then
-            echo "0" > version.txt
+            echo "v1" > version.txt
           fi
-          current_version=$(cat version.txt)
+
+          current_version=$(cat version.txt | tr -d 'v')
           new_version=$((current_version + 1))
-          echo "$new_version" > version.txt
-          echo "new_version=$new_version" >> $GITHUB_ENV
+          echo "v$new_version" > version.txt
+          echo "new_version=v$new_version" >> $GITHUB_ENV
           echo "Version updated to v$new_version"
 
       - name: Build Docker Image
@@ -53,7 +54,7 @@ jobs:
       - name: Tag Image with Version
         id: tag-image
         run: |
-          FINAL_TAG="us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:${{ env.short_sha }}-v${{ env.new_version }}"
+          FINAL_TAG="us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:${{ env.short_sha }}-${{ env.new_version }}"
           echo "final_tag=$FINAL_TAG" >> $GITHUB_ENV
           echo "final_tag=$FINAL_TAG" >> $GITHUB_OUTPUT
           docker tag traeta-backend-temp $FINAL_TAG
@@ -76,7 +77,7 @@ jobs:
           git config --global user.email "github-actions@github.com"
           git config --global user.name "github-actions"
           git add version.txt
-          git commit -m "Bump version to v${{ env.new_version }}" || echo "No version change"
+          git commit -m "Bump version to ${{ env.new_version }}" || echo "No version change"
           git push origin main || echo "Push skipped"
 
   deploy:
@@ -97,8 +98,7 @@ jobs:
         run: |
           echo "Updating docker-compose.yml with tag: $FINAL_TAG"
           sed -i "s|{{IMAGE_TAG}}|${FINAL_TAG}|g" docker-compose.yml
-          echo "✅ docker-compose.yml updated:"
-          grep "${FINAL_TAG}" docker-compose.yml || echo "⚠️ Tag not found"
+          cat docker-compose.yml
 
       - name: Update Environment File
         run: echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
