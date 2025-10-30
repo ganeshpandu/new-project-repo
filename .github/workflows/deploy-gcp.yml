@@ -1,4 +1,4 @@
-name: Deploy to GCP VM (Self-Hosted) with Versioned Tag
+name: Deploy to GCP VM (Self-Hosted) with Versioned Tag (No version.txt)
 
 on:
   push:
@@ -30,37 +30,31 @@ jobs:
       - name: Configure Docker for GAR
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      - name: Read and increment version
+      - name: Generate Version Tag
         id: version
         run: |
-          if [ ! -f version.txt ]; then
-            echo "v1" > version.txt
-          fi
-
-          current_version=$(cat version.txt | tr -d 'v')
-          new_version=$((current_version + 1))
-          echo "v$new_version" > version.txt
-          echo "new_version=v$new_version" >> $GITHUB_ENV
-          echo "Version updated to v$new_version"
+          VERSION="v${{ github.run_number }}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using version tag: $VERSION"
 
       - name: Build Docker Image
         id: build
         run: |
           docker build -t traeta-backend-temp .
-          image_id=$(docker images traeta-backend-temp --format "{{.ID}}" | head -n1)
-          short_sha=$(echo $image_id | cut -c1-6)
-          echo "short_sha=$short_sha" >> $GITHUB_ENV
+          IMAGE_ID=$(docker images traeta-backend-temp --format "{{.ID}}" | head -n1)
+          SHORT_SHA=$(echo $IMAGE_ID | cut -c1-6)
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
 
-      - name: Tag Image with Version
+      - name: Tag Docker Image with Version
         id: tag-image
         run: |
-          FINAL_TAG="us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:${{ env.short_sha }}-${{ env.new_version }}"
+          FINAL_TAG="us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:${{ env.SHORT_SHA }}-${{ env.VERSION }}"
           echo "final_tag=$FINAL_TAG" >> $GITHUB_ENV
           echo "final_tag=$FINAL_TAG" >> $GITHUB_OUTPUT
           docker tag traeta-backend-temp $FINAL_TAG
-          echo "Tagged image as $FINAL_TAG"
+          echo "✅ Tagged image as $FINAL_TAG"
 
-      - name: Push Image to GAR
+      - name: Push Image to Google Artifact Registry
         run: docker push ${{ env.final_tag }}
 
       - name: Save Built Image as Tar
@@ -71,14 +65,6 @@ jobs:
         with:
           name: backend-image
           path: backend-image.tar
-
-      - name: Commit updated version.txt
-        run: |
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "github-actions"
-          git add version.txt
-          git commit -m "Bump version to ${{ env.new_version }}" || echo "No version change"
-          git push origin main || echo "Push skipped"
 
   deploy:
     needs: build-and-push
@@ -96,7 +82,7 @@ jobs:
 
       - name: Update Docker Compose with Latest Image Tag
         run: |
-          echo "Updating docker-compose.yml with tag: $FINAL_TAG"
+          echo "Updating docker-compose.yml with image tag: $FINAL_TAG"
           sed -i "s|{{IMAGE_TAG}}|${FINAL_TAG}|g" docker-compose.yml
           cat docker-compose.yml
 
