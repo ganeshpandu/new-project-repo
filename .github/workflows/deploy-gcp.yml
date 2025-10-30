@@ -1,4 +1,4 @@
-name: Deploy to GCP VM (Self-Hosted) with Versioned Tag
+name: Deploy to GCP VM (Self-hosted) with Versioned Tag
 
 on:
   push:
