@@ -2,32 +2,35 @@ version: '3.8'
 
 services:
   user-service:
-    image: us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+    image: {{IMAGE_TAG}}
     container_name: user-service
+    restart: always
     ports:
       - "3001:3001"
-    networks:
-      - traeta-network
     depends_on:
       - traeta-postgres
     env_file:
       - .env
+    networks:
+      - traeta-network
 
   master-service:
-    image: us-central1-docker.pkg.dev/traeta-data/traeta-gar/traeta-backend:latest
+    image: {{IMAGE_TAG}}
     container_name: master-service
+    restart: always
     ports:
       - "3002:3002"
-    networks:
-      - traeta-network
     depends_on:
       - traeta-postgres
     env_file:
       - .env
+    networks:
+      - traeta-network
 
   traeta-postgres:
     image: postgres:15
     container_name: traeta-postgres
+    restart: always
     ports:
       - "5432:5432"
     networks:
@@ -44,13 +47,14 @@ services:
       context: .                     # 👈 changed from ./nginx to . so it can access apple-app-site-association
       dockerfile: ./nginx/Dockerfile.nginx
     container_name: traeta-nginx
+    restart: always
     ports:
       - "80:80"
-    networks:
-      - traeta-network
     depends_on:
       - user-service
       - master-service
+    networks:
+      - traeta-network
 
 networks:
   traeta-network:
